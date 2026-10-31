@@ -35,7 +35,7 @@ function ENT:Go(name,nextState)
     -- Keep the occupied spot reserved if the next journey cannot start.
     if not route then self.WaitUntil=CurTime()+4 return false end
     b:Release(self) b:Reserve(key,self)
-    self.Target=name self.Route=route self.RouteIndex=1 self.AfterMove=nextState
+    self.Target=name self.Route=route self.RouteIndex=1 self.AfterMove=nextState self.CrowdPoint=nil
     self.BlockedSince=nil
     self:SetActivity("Walking") return true
 end
@@ -43,13 +43,14 @@ function ENT:Think()
     local now=CurTime() local dt=math.Clamp(now-self.LastThink,0,0.1) self.LastThink=now
     local b=self.DBBuilding if not IsValid(b) then self:Remove() return end
     if self.Route then
-        local target=self.Route[self.RouteIndex]
+        local target=self.CrowdPoint or self.Route[self.RouteIndex]
         if not target then
             self.Route=nil self.State=self.AfterMove self.WaitUntil=now+math.Rand(4,8) self:SetActivity(self.State)
             if self.State=="queuing" then self.WaitUntil=now+0.5 end
         else
             local delta=target-self:GetPos() local distance=delta:Length()
-            if distance<2 then self.RouteIndex=self.RouteIndex+1
+            if distance<2 then
+                if self.CrowdPoint then self.CrowdPoint=nil else self.RouteIndex=self.RouteIndex+1 end
             else
                 local step=self:GetPos()+delta:GetNormalized()*math.min(distance,self.Speed*dt)
                 local waitingDoor=DB.WaitForDoor(b,self,target)
@@ -60,16 +61,21 @@ function ENT:Think()
                     self:SetAngles(Angle(0,math.ApproachAngle(self:GetAngles().y,delta:Angle().y,220*dt),0))
                     self:Animate({"walk_all","walk_all_Moderate"})
                 else
+                    if not waitingDoor and now>(self.YieldAt or 0) then
+                        self.YieldAt=now+1
+                        self.CrowdPoint=DB.CrowdDetour(b,self,hit.Entity,target)
+                    end
                     self:Animate({"idle_subtle","Idle01"}) self:SetActivity(waitingDoor and "Waiting for door" or "Waiting for room")
                     self.BlockedSince=self.BlockedSince or now
                     if now-self.BlockedSince>4 and now>(self.ReplanAt or 0) then
                         self.ReplanAt=now+3 local route=DB.FindRoute(b,self,self.Target,true)
-                        if route then self.Route=route self.RouteIndex=1 end
+                        if route then self.Route=route self.RouteIndex=1 self.CrowdPoint=nil end
                     end
                 end
             end
         end
     else
+        DB.TryConversation(b,self,now)
         self:Animate({"idle_subtle","LineIdle01","Idle01"})
         if self:GetCycle()>=0.995 then self:SetCycle(0) end
         if now>self.WaitUntil and now>=self.DecisionAt then
@@ -117,6 +123,7 @@ function ENT:Think()
             local toward={browse1=Vector(-360,260,40),browse2=Vector(-220,90,40),browse3=Vector(-195,-145,40)}
             if toward[self.Target] then face=b:LocalToWorld(DB.Gas.transform(toward[self.Target])) end
         end
+        if IsValid(self.ChatPartner) and now<(self.ChatUntil or 0) then face=self.ChatPartner:GetPos() end
         if face then self:SetAngles(Angle(0,math.ApproachAngle(self:GetAngles().y,(face-self:GetPos()):Angle().y,100*dt),0)) end
         if now>(self.GestureAt or 0) then
             self.GestureAt=now+math.Rand(6,14)
@@ -134,6 +141,7 @@ end
 function ENT:Use(ply)
     if not IsValid(ply) or not ply:IsPlayer() or ply:GetPos():DistToSqr(self:GetPos())>160^2 or CurTime()<(self.GreetAt or 0) then return end
     self.GreetAt=CurTime()+5
+    DB.Say(self,self.Role=="clerk" and "Welcome! Bring your items here to check out." or "Hi there!",CurTime())
     self:EmitSound("vo/npc/male01/hi0"..math.random(1,2)..".wav",65)
     self:SetNW2Float("DBTalkUntil",CurTime()+1.6)
     if self.Role=="clerk" then self.DBBuilding:CheckoutPlayer(ply) end

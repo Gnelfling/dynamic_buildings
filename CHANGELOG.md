@@ -1,5 +1,13 @@
 # Changes
 
+## 0.5.0 alpha
+
+- Add deterministic actor yielding, hull-checked sidesteps and six additional aisle/forecourt navigation points. Match movement hull width to the actual actor collision box, removing the artificial four-unit extra margin on each side. Door passage rules and collision sweeps remain active.
+- Add short NPC conversations with partner facing, a five-second pause, visible nearby captions and mouth movement. Exchanges require proximity and line of sight, have a 45-second cooldown, and cancel delayed replies if a partner leaves or is removed. E greetings now also show captions. Dialogue is text, not generated voice.
+- Give traffic an independent schedule and a `db_cars 0..2` budget (default 2). Walk-in limits no longer suppress drivers; `db_customers` now controls pedestrians only. Retry lane availability every three seconds, space successful car attempts 12–18 seconds apart, and prioritize departures. Existing two-bay placement remains the limit; arrival times still depend on drive clearance.
+- Add forward obstacle checks so cars stop earlier, retaining blocked-state reporting and rate-limited signals.
+- Add real-Lua regressions for yielding priority, alternate-side clearance, dialogue cancellation/cooldowns, two-bay visits, full-bay limits, independent pedestrian capacity and departure priority. Engine crowd/path/model testing remains required.
+
 ## 0.4.1 alpha
 
 - Rename the car clearance helper to `DBIsPathBlocked`: `Blocked` collides with a native entity method and prevented car initialization in GMod.

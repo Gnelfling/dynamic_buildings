@@ -1,5 +1,5 @@
 local DB = DynamicBuildings
-local mins, maxs = Vector(-16,-16,1), Vector(16,16,70)
+local mins, maxs = Vector(-12,-12,1), Vector(12,12,70)
 function DB.TraceActor(building, actor, a, b, planning)
     return util.TraceHull({start=a,endpos=b,mins=mins,maxs=maxs,mask=MASK_PLAYERSOLID,
         filter=function(e)

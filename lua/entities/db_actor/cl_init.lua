@@ -16,3 +16,17 @@ function ENT:Draw()
     end
     self:DrawModel()
 end
+hook.Add("HUDPaint","DB.ActorDialogue",function()
+    local ply=LocalPlayer() if not IsValid(ply) then return end
+    local now=CurTime()
+    for _,e in ipairs(ents.FindByClass("db_actor")) do
+        if IsValid(e) and e:GetNW2Float("DBLineUntil",0)>now and e:GetPos():DistToSqr(ply:GetPos())<450^2 then
+            local pos=e:GetPos()+Vector(0,0,82)
+            local tr=util.TraceLine({start=ply:EyePos(),endpos=pos,filter={ply,e},mask=MASK_VISIBLE})
+            local screen=pos:ToScreen()
+            if screen.visible and not tr.Hit then
+                draw.SimpleTextOutlined(e:GetNW2String("DBLine",""),"DermaDefaultBold",screen.x,screen.y,color_white,TEXT_ALIGN_CENTER,TEXT_ALIGN_BOTTOM,1,Color(0,0,0,220))
+            end
+        end
+    end
+end)

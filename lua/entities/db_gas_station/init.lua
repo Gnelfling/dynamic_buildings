@@ -33,7 +33,7 @@ function ENT:Own(e)
 end
 function ENT:Initialize()
     self.Children={} self.Reservations={} self.CheckoutQueue={} self.Carts={} self.Parking={}
-    self.NextVisit=CurTime()+4 self.NextStock=CurTime()+1
+    self.NextVisit=CurTime()+6 self.NextCar=CurTime()+3 self.NextStock=CurTime()+1
     self:SetLightsOn(true)
     self:SetModel(DB.Gas.model) self:PhysicsInit(SOLID_VPHYSICS)
     self:SetMoveType(MOVETYPE_NONE) self:SetSolid(SOLID_VPHYSICS)
@@ -75,7 +75,7 @@ function ENT:PendingCarCount(except)
 end
 function ENT:SpawnPerson(role,car,spawnPos)
     if self.Removing then return end
-    if role~="clerk" and self:CustomerCount()+self:PendingCarCount(car)>=GetConVar("db_customers"):GetInt() then return end
+    if role~="clerk" and not IsValid(car) and DB.WalkInCount(self)>=GetConVar("db_customers"):GetInt() then return end
     local pos=spawnPos or DB.GasPoint(self,role=="clerk" and "clerk" or "outside")
     local space=util.TraceHull({start=pos,endpos=pos,mins=Vector(-16,-16,1),maxs=Vector(16,16,70),mask=MASK_PLAYERSOLID})
     if space.Hit or space.StartSolid then return end
@@ -115,14 +115,23 @@ function ENT:Think()
         for e in pairs(self.Children) do
             if not IsValid(e) then self.Children[e]=nil end
         end
-        local free
-        for i=1,#DB.Gas.parking do if not IsValid(self.Parking[i]) then free=i break end end
-        self.PreferCar=not self.PreferCar
-        if self.PreferCar and GetConVar("db_traffic"):GetBool() and self:CustomerCount()+self:PendingCarCount()<GetConVar("db_customers"):GetInt() and free and not IsValid(self.LaneCar) then
+        self:SpawnPerson("customer")
+    end
+    if now>(self.NextCar or 0) then
+        self.NextCar=now+3
+        local free,active,departing=nil,0,false
+        for i=1,#DB.Gas.parking do
+            local car=self.Parking[i]
+            if IsValid(car) then
+                active=active+1
+                if car.Parked and car.CustomerDone then departing=true end
+            elseif not free then free=i end
+        end
+        if GetConVar("db_traffic"):GetBool() and active<GetConVar("db_cars"):GetInt() and free and not departing and not IsValid(self.LaneCar) then
             local car=ents.Create("db_visit_car")
             if IsValid(car) then self:Own(car) car.ParkingID=free self.Parking[free]=car car:Spawn() end
-            if not IsValid(car) then self:SpawnPerson("customer") end
-        else self:SpawnPerson("customer") end
+            self.NextCar=now+(IsValid(car) and math.Rand(12,18) or 15)
+        end
     end
     self:NextThink(now+0.25) return true
 end

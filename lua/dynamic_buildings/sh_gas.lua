@@ -12,6 +12,9 @@ DB.Gas = {
         browse3 = Vector(-244,-88,2), checkout = Vector(-310,-40,2),
         clerk = Vector(-412,-40,2), clerkexit = Vector(-412,-124,2),
         corner = Vector(-300,-132,2),
+        aisle_south = Vector(-220,-192,2), aisle_east = Vector(-112,-120,2),
+        aisle_north = Vector(-124,192,2), aisle_west = Vector(-300,48,2),
+        forecourt_north = Vector(96,96,2), forecourt_south = Vector(96,-180,2),
         queue1 = Vector(-260,-40,2), queue2 = Vector(-210,-40,2),
         queue3 = Vector(-160,-40,2)
     },

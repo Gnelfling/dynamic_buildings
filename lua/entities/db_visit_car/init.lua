@@ -94,10 +94,14 @@ function ENT:Think()
             local aligned=math.abs(math.AngleDifference(yaw,heading))<25
             local road=b:WorldToLocal(self:GetPos()).x>-500
             local speed=road and self.Cruise or (reversing and 28 or 50)
+            -- Brake before the next movement step reaches an occupant or prop.
+            local ahead=self:GetPos()+delta:GetNormalized()*math.min(delta:Length(),30+self.Speed*0.6)
+            local trafficBlocked=self:DBIsPathBlocked(ahead,yaw)
+            if trafficBlocked then speed=0 end
             if self.Index==#self.Path or self.Index==1 then speed=math.min(speed,delta:Length()+8) end
             self.Speed=math.Approach(self.Speed,aligned and speed or 0,45*dt)
             local step=self:GetPos()+delta:GetNormalized()*math.min(delta:Length(),self.Speed*dt)
-            if not self:DBIsPathBlocked(step,yaw) then
+            if not trafficBlocked and not self:DBIsPathBlocked(step,yaw) then
                 self:SetPos(step) self:SetAngles(Angle(0,yaw,0)) self.BlockedAt=nil
                 self:SetVisitState(reversing and "Reversing" or (self.Direction==1 and "Arriving" or "Leaving"))
             else

@@ -328,4 +328,62 @@ collision=true
 local obstructed=fresh() obstructed:Initialize()
 assert(obstructed.removed and not obstructed.DBReady and shop.LaneCar==nil,'a blocked spawn must release its lane without becoming ready')
 `, 'vehicle cleanup tests')();
-console.log('PASS: '+count+' Lua files parse; routes, queues, reversed-door passage, curved traffic/bounds, vehicle cleanup, inventory/checkout and bounded lighting tests.');
+const crowd=fs.readFileSync('lua/dynamic_buildings/sv_crowd.lua','utf8');
+fengari.load(`
+DynamicBuildings={}
+function IsValid(e) return type(e)=='table' and not e.invalid end
+local vm={}
+function Vector(x,y,z) return setmetatable({x=x,y=y,z=z},vm) end
+vm.__add=function(a,b) return Vector(a.x+b.x,a.y+b.y,a.z+b.z) end
+vm.__sub=function(a,b) return Vector(a.x-b.x,a.y-b.y,a.z-b.z) end
+vm.__mul=function(a,n) return Vector(a.x*n,a.y*n,a.z*n) end
+vm.__index={Length=function(v) return math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z) end,
+ GetNormalized=function(v) local n=v:Length(); return Vector(v.x/n,v.y/n,v.z/n) end,
+ DistToSqr=function(a,b) local d=a-b;return d.x*d.x+d.y*d.y+d.z*d.z end}
+local wall=false local reply
+util={TraceLine=function() return {Hit=wall} end}
+timer={Simple=function(_,f) reply=f end} function CurTime() return 103 end
+${crowd}
+local DB=DynamicBuildings
+local function actor(id,x)
+ return {DBActor=true,State='browsing',EntIndex=function() return id end,GetPos=function() return Vector(x,0,2) end,
+ SetNW2String=function(e,k,v) e[k]=v end,SetNW2Float=function(e,k,v) e[k]=v end}
+end
+local a,b=actor(1,0),actor(2,60) a.Route={} b.Route={}
+assert(DB.ShouldYield(b,a) and not DB.ShouldYield(a,b),'only one opposing moving actor must yield')
+a.Route=nil assert(DB.ShouldYield(b,a),'a mover must avoid stationary stock browsers')
+DB.TraceActor=function(_,_,start,goal) return {Hit=wall or goal.y>0,StartSolid=false} end
+local p=DB.CrowdDetour({},b,a,Vector(160,0,2))
+assert(p and p.y<0,'sidestep must try the other side when the first side is obstructed')
+wall=true assert(DB.CrowdDetour({},b,a,Vector(160,0,2))==nil,'no detour may pass through blocked geometry')
+b.Route=nil local shop={Children={[a]=true,[b]=true}}
+assert(not DB.TryConversation(shop,a,100),'conversations cannot cross a wall')
+wall=false a.ChatAt=0
+assert(DB.TryConversation(shop,a,100) and a.DBLine and a.WaitUntil==105 and b.WaitUntil==105,'conversation must reserve a short shared pause')
+reply() assert(b.DBLine,'nearby stationary partner must reply')
+assert(not DB.TryConversation(shop,a,104),'conversation cooldown must prevent repeated exchanges')
+b.DBLine=nil b.invalid=true reply() assert(b.DBLine==nil,'removed partner must not receive a delayed reply')
+`, 'crowd and dialogue tests')();
+fengari.load(`
+ENT={} DynamicBuildings={Gas={parking={{},{}}}}
+function AddCSLuaFile() end function include() end function CreateConVar() end
+cleanup={Register=function() end} hook={Add=function() end}
+function IsValid(e) return type(e)=='table' and not e.invalid end
+function CurTime() return 100 end function math.Rand(a) return a end
+local settings={db_traffic=1,db_cars=2,db_customers=2}
+function GetConVar(key) return {GetInt=function() return settings[key] end,GetBool=function() return settings[key]==1 end} end
+${station}
+local spawned=0
+ents={Create=function() return {Spawn=function() spawned=spawned+1 end} end}
+local shop=setmetatable({Doors={},Children={},Parking={},NextStock=999,NextVisit=999,NextCar=0},{__index=ENT})
+function shop:Own(e) self.Children[e]=true end function shop:NextThink() end
+function shop:CustomerCount() return 4 end
+shop:Think() assert(spawned==1 and shop.Parking[1],'full pedestrian population must not suppress car arrivals')
+shop.NextCar=0 shop:Think() assert(spawned==2 and shop.Parking[2],'second bay must receive its own visit')
+shop.NextCar=0 shop:Think() assert(spawned==2,'full bays must prevent excess cars')
+shop.Parking[2]=nil shop.Parking[1].Parked=true shop.Parking[1].CustomerDone=true
+shop.NextCar=0 shop:Think() assert(spawned==2,'departures must have priority over new arrivals')
+shop.Parking[1].CustomerDone=false settings.db_cars=1
+shop.NextCar=0 shop:Think() assert(spawned==2,'configured car cap must be respected')
+`, 'independent traffic scheduling tests')();
+console.log('PASS: '+count+' Lua files parse; routing, crowd yielding, dialogues, independent traffic scheduling, doors, inventory, vehicle cleanup and lighting regressions.');
