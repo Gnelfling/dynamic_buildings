@@ -40,17 +40,12 @@ function ENT:Initialize()
     self:SetOccupied(true)
     self.Doors={}
     for _,d in ipairs(DB.Gas.doors) do
-        local door=ents.Create("prop_door_rotating")
+        local door=ents.Create("db_door")
         if IsValid(door) then
-            door:SetModel("models/props_c17/door01_left.mdl")
             door:SetPos(self:LocalToWorld(d.pos)) door:SetAngles(Angle(0,self:GetAngles().y+d.yaw,0))
-            door:SetKeyValue("distance","90") door:SetKeyValue("speed","120")
-            -- Force the reverse swing; automatic Open without an activator
-            -- previously always selected Source's forward direction.
-            door:SetKeyValue("opendir",tostring(d.openDirection or 2))
-            door:SetKeyValue("dmg","0") door:SetKeyValue("forceclosed","0")
-            door:SetKeyValue("returndelay","-1") door.DBManagedDoor=true
-            door:Spawn() door:Activate() self:Own(door) self.Doors[#self.Doors+1]=door
+            door:SetSwing(d.swing) door.DBManagedDoor=true
+            self:Own(door)
+            door:Spawn() door:Activate() self.Doors[#self.Doors+1]=door
         end
     end
     self.Clerk=self:SpawnPerson("clerk")

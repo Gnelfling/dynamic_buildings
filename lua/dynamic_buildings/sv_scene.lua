@@ -19,6 +19,7 @@ end
 function DB.SetDoorState(door,open,activator)
     if not IsValid(door) or door.DBRequestedOpen==open then return end
     door.DBRequestedOpen=open
+    if door.SetDesiredOpen then door:SetDesiredOpen(open) return end
     door:Fire(open and "Open" or "Close","",0,activator,activator)
 end
 function DB.DoorDemand(b,door,now)
@@ -30,14 +31,15 @@ function DB.DoorDemand(b,door,now)
             if target and util.DistanceToLine(e:GetPos(),target,door:GetPos())<64 then passing=true end
         end
     end
-    -- Recover if a manually operated/blocked door disagrees with our request.
+    -- Legacy prop-door recovery; explicit hinge doors own their movement state.
     -- Source prop doors expose 0=closed, 1=opening, 2=open, 3=closing.
-    if now>(door.DBRetryAt or 0) and door.GetInternalVariable then
+    if not door.SetDesiredOpen and now>(door.DBRetryAt or 0) and door.GetInternalVariable then
         local state=door:GetInternalVariable("m_eDoorState")
         if (door.DBRequestedOpen and (state==0 or state==3)) or
             (door.DBRequestedOpen==false and state==2) then door.DBRequestedOpen=nil end
         door.DBRetryAt=now+2
     end
+    if not passing and now<(door.ManualUntil or 0) then return end
     if passing or occupied then
         door.DBCloseAt=now+3 DB.SetDoorState(door,true)
     elseif door.DBCloseAt and now>door.DBCloseAt then
@@ -54,4 +56,19 @@ net.Receive("db_settings",function(_,ply)
     local traffic=net.ReadBool()
     GetConVar("db_customers"):SetInt(customers)
     GetConVar("db_traffic"):SetBool(traffic)
+end)
+
+concommand.Add("db_inspect_cars",function(ply)
+    if IsValid(ply) and not ply:IsAdmin() then return end
+    local function report(s) if IsValid(ply) then ply:PrintMessage(HUD_PRINTCONSOLE,s) else print(s) end end
+    for _,model in ipairs(DB.Gas.carModels) do
+        if util.IsValidModel(model) then
+            local e=ents.Create("prop_dynamic")
+            if IsValid(e) then
+                e:SetModel(model)
+                report(model.." | native skins: "..e:SkinCount().." | bounds: "..tostring(e:OBBMins()).." / "..tostring(e:OBBMaxs()))
+                e:Remove()
+            end
+        else report(model.." | NOT INSTALLED") end
+    end
 end)

@@ -50,6 +50,7 @@ DynamicBuildings={}
 function IsValid(e) return type(e)=='table' and not e.invalid end
 util={AddNetworkString=function() end}
 net={Receive=function() end}
+concommand={Add=function() end}
 ${scene}
 local DB=DynamicBuildings
 local a,b,c={},{},{}
@@ -84,4 +85,52 @@ DB.FindRoute=function() return {{}} end
 assert(ENT.Go(visitor,'next','arrived')==true)
 assert(owner.Reservations.old==nil and owner.Reservations.next==visitor,'successful travel transfers reservation')
 `, 'scene regression tests')();
-console.log('PASS: '+count+' Lua files parse; route, invalid destination, queue isolation/removal, door command and reservation regression tests.');
+const doorSource=fs.readFileSync('lua/entities/db_door/init.lua','utf8');
+fengari.load(`
+ENT={} DynamicBuildings={}
+function AddCSLuaFile() end function include() end
+function IsValid(e) return type(e)=='table' end
+local now=0 function CurTime() return now end
+function math.Clamp(x,a,b) return math.max(a,math.min(b,x)) end
+function math.Approach(x,t,s) if x<t then return math.min(t,x+s) else return math.max(t,x-s) end end
+function Angle(p,y,r) return {p=p,y=y,r=r} end
+function Vector(x,y,z)
+ local v={x=x,y=y,z=z}
+ function v:Rotate(a) local c,s=math.cos(math.rad(a.y)),math.sin(math.rad(a.y)); local x=self.x;self.x=x*c-self.y*s;self.y=x*s+self.y*c end
+ return v
+end
+MASK_PLAYERSOLID=1
+local blocked=false
+util={TraceHull=function() return {Hit=blocked,StartSolid=false} end}
+${doorSource}
+local door=setmetatable({LastT=0,CurrentTurn=0,ClosedYaw=-90,desired=true},{__index=ENT})
+function door:GetDesiredOpen() return self.desired end
+function door:GetSwing() return 90 end
+function door:GetPos() return Vector(0,0,0) end
+function door:SetAngles(a) self.angle=a end
+function door:EmitSound() end function door:NextThink() end
+for i=1,12 do now=now+0.1;door:Think() end
+assert(door.CurrentTurn==90 and door.angle.y==0,'east door must swing outward from -90 to 0')
+door.desired=false blocked=true now=now+0.1 door:Think()
+assert(door.CurrentTurn==90,'blocked door must not move through an occupant')
+blocked=false
+for i=1,12 do now=now+0.1;door:Think() end
+assert(door.CurrentTurn==0 and door.angle.y==-90,'door must close to its original jamb orientation')
+`, 'hinged door movement tests')();
+const gasSource=fs.readFileSync('lua/dynamic_buildings/sh_gas.lua','utf8');
+fengari.load(`
+DynamicBuildings={}
+function Vector(x,y,z) return {x=x,y=y,z=z} end
+local installed=false
+util={IsValidModel=function(model) return installed and model:find('nuke_sedan01_low',1,true)~=nil end}
+${gasSource}
+assert(DynamicBuildings.ChooseCarModel()==nil,'no installed cars must fail cleanly')
+installed=true
+assert(DynamicBuildings.ChooseCarModel():find('nuke_sedan01_low',1,true),'only choose installed models')
+for i=1,100 do
+ local skin=DynamicBuildings.ChooseCarSkin(4)
+ assert(skin>=0 and skin<4,'skin must stay within native model range')
+ assert(DynamicBuildings.ChooseCarSkin(1)==0,'one-skin model must use skin zero')
+end
+`, 'vehicle variant tests')();
+console.log('PASS: '+count+' Lua files parse; navigation, queues, reservations, door movement/obstruction and vehicle availability/skin tests.');

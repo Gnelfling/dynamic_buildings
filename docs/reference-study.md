@@ -1,0 +1,13 @@
+# Reference and asset study — 0.3
+
+Read-only local references: `gmpublisher/lua/entities/vac_station_door/init.lua`, `vac/scifi/sv_station_staff.lua`, `sv_station_life.lua`, `sv_house_life.lua`, and `cl_station.lua`.
+
+Useful patterns: explicit door pivots instead of relying on generic engine door origins; cache plan grids and animation lookups; separate 0.25-second behavior decisions from movement updates; clear animation layers at transitions; choose activities that are not already occupied. The reference's coroutine mesh loading and frame-budgeted mesh rebuilds solve its custom destructible rendering costs. Our native compiled building models do not need that renderer or its destruction/light modules. No claim of measured performance superiority is made.
+
+This implementation uses original explicit door geometry, short-lived per-building navigation edge caches, weighted routes, cached actor sequence/flex lookup, throttled decisions, and lower parked-vehicle think frequency. Runtime sweeps remain authoritative for moving actors and doors. The reference's direct-path fallback on pathfinding failure is intentionally not adopted.
+
+The installed game's VPK index was inspected read-only. Stock `door01_left.mdl` has compiled bounds approximately X -5.91..5.82, Y -1.28..47.28, Z -54.28..54.28: its width is along Y and its vertical origin is near the center. It must be transformed to our X-aligned, bottom-hinged collision leaf, not positioned as if its origin were the bottom corner. We fit its render geometry separately from the explicitly defined collision hull.
+
+The two requested car models were absent from the loose reference folder and stock game VPKs inspected on this machine. Their exact skin count/paint materials therefore cannot be claimed as verified. Runtime `SkinCount` / `SetSkin` selects valid native variants; `GetPlayerColor` supports a model-authored PlayerColor proxy if present. Global paint tint is kept white to avoid recoloring tires and windows. A model with one skin and no supported color proxy will retain its original appearance. An admin can use `db_inspect_cars` in the target game installation to obtain exact installed skin counts and bounds.
+
+Primary API references: [SetSkin](https://wiki.facepunch.com/gmod/Entity:SetSkin), [SkinCount](https://wiki.facepunch.com/gmod/Entity:SkinCount), [PlayerColor proxy implementation](https://github.com/Facepunch/garrysmod/blob/master/garrysmod/lua/matproxy/player_color.lua), [TraceHull](https://wiki.facepunch.com/gmod/util.TraceHull). These support the mechanisms, not an assertion that these particular car assets supply multiple skins.

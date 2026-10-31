@@ -16,4 +16,10 @@ Traffic is opt-in prototype work. One visit car per building follows measured lo
 
 ## Immediate next pass
 
-Version 0.2 adds reverse-swing door configuration, state-based door inputs, shelf drinks, player basket checkout, queue positions, gestures, facial presentation and admin settings. Verify these changes against engine collision and the measured shelves. Placement preview, overlap validation, deeper conversations and car/driver handoff remain later work.
+Version 0.3 replaces engine prop doors with `db_door`, whose origin is the measured jamb, physics leaf extends 48 units along local X and rises 108 units, and client-only stock model is fitted to that same leaf. Server movement sweeps a conservative box before changing the hinge angle. World door angles include station rotation. A closing/opening leaf pauses on obstruction instead of damaging occupants. Client collision is built from the same shared hull function.
+
+Reference-inspired efficiency work caches sequence and flex IDs, reduces behavior-decision frequency while retaining movement updates, and caches static navigation visibility edges for one second per building. Routes use distance-weighted graph search. Dynamic replans bypass the edge cache and include actors; movement always traces. No benchmark has yet been run inside GMod.
+
+Vehicles use only the two configured nuke models, choose native skins within the installed model's actual range, and expose `PlayerColor` only for authored paint proxies. Bounds determine ground offset and a conservative turning envelope. A blocked spawn is cancelled, moving cars wait on obstacles, and parked cars retry customer spawning. Straight segments/pivot turns and the entrance-spawned driver are still prototype behavior.
+
+Placement preview, overlap validation, deeper conversations and car/driver handoff remain later work. See `reference-study.md` for inspected source patterns and the limits of the asset research.

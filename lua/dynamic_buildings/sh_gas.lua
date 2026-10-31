@@ -17,12 +17,24 @@ DB.Gas = {
     },
     browsing = {"browse1", "browse2", "browse3"},
     doors = {
-        {pos=Vector(-1284,-212,55), yaw=0, openDirection=2},
-        {pos=Vector(-1568,24,55), yaw=90, openDirection=2}
+        -- Actual jamb pivots, not model centers. Both leaves swing out of the shop.
+        {pos=Vector(-1284,-212,2), yaw=-90, swing=90},
+        {pos=Vector(-1568,24,2), yaw=0, swing=90}
     },
+    carModels = {"models/props/generic_propcars/nuke_station_wagon02_low.mdl",
+        "models/props/generic_propcars/nuke_sedan01_low.mdl"},
     -- A single provisional parking visit, not a map-wide driving AI.
     carRoute = {Vector(-368,-580,2),Vector(-368,-100,2),Vector(-740,-100,2),Vector(-1148,-112,2)}
 }
 function DB.GasPoint(building, name)
     return building:LocalToWorld(DB.Gas.transform(DB.Gas.points[name]))
+end
+function DB.ChooseCarModel()
+    local available={}
+    for _,model in ipairs(DB.Gas.carModels) do if util.IsValidModel(model) then available[#available+1]=model end end
+    if #available==0 then return nil end
+    return available[math.random(1,#available)]
+end
+function DB.ChooseCarSkin(count)
+    return math.random(0,math.max(0,count-1))
 end

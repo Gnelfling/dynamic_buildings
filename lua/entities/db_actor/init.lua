@@ -1,10 +1,16 @@
 AddCSLuaFile("shared.lua") AddCSLuaFile("cl_init.lua") include("shared.lua")
 local DB=DynamicBuildings
 function ENT:Animate(names)
+    self.SequenceCache=self.SequenceCache or {}
     for _,name in ipairs(names) do
-        local id=self:LookupSequence(name)
+        local id=self.SequenceCache[name]
+        if id==nil then id=self:LookupSequence(name) self.SequenceCache[name]=id end
         if id and id>=0 then
-            if self.DBSequence~=id then self:ResetSequence(id) self:SetCycle(0) self.DBSequence=id end
+            if self.DBSequence~=id then
+                self:ResetSequence(id) self:SetCycle(0) self.DBSequence=id
+                local speed=self:GetSequenceGroundSpeed(id)
+                self:SetPlaybackRate(name:find("walk") and speed>1 and self.Speed/speed or 1)
+            end
             return
         end
     end
@@ -18,6 +24,7 @@ function ENT:Initialize()
     self.State=self.Role=="clerk" and "working" or "enter"
     self:SetActivity(self.State) self.WaitUntil=CurTime()+math.Rand(1,3)
     self.LastThink=CurTime()
+    self.DecisionAt=0 self.FidgetAt=CurTime()+math.Rand(3,8)
 end
 function ENT:Go(name,nextState)
     local b=self.DBBuilding
@@ -62,7 +69,9 @@ function ENT:Think()
         end
     else
         self:Animate({"idle_subtle","LineIdle01","Idle01"})
-        if now>self.WaitUntil then
+        if self:GetCycle()>=0.995 then self:SetCycle(0) end
+        if now>self.WaitUntil and now>=self.DecisionAt then
+            self.DecisionAt=now+0.25
             if self.State=="enter" then self:Go("entry","choose")
             elseif self.State=="choose" then self:Go(DB.Gas.browsing[math.random(1,3)],"browsing")
             elseif self.State=="browsing" then
@@ -98,6 +107,10 @@ function ENT:Think()
             local names={"hg_nod_yes","G_look_small","hg_turn_l"}
             local id=self:LookupSequence(names[math.random(1,#names)])
             if id and id>=0 then self:AddGestureSequence(id,true) end
+        end
+        if now>self.FidgetAt then
+            self.FidgetAt=now+math.Rand(3,8)
+            self:SetPoseParameter("head_yaw",math.Rand(-25,25))
         end
     end
     self:NextThink(now) return true
