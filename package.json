@@ -1,0 +1,6 @@
+{
+  "name": "dynamic-buildings-checks",
+  "private": true,
+  "scripts": {"test": "node tests/check.cjs"},
+  "devDependencies": {"luaparse": "0.3.1", "fengari-web": "0.1.4"}
+}
