@@ -1,6 +1,7 @@
 AddCSLuaFile("shared.lua") AddCSLuaFile("cl_init.lua") include("shared.lua")
 local DB=DynamicBuildings
 function ENT:Initialize()
+    self.DBReady=false self.LastThink=CurTime()
     local b=self.DBBuilding if not IsValid(b) then self:Remove() return end
     local model=DB.ChooseCarModel()
     if not model then
@@ -24,11 +25,12 @@ function ENT:Initialize()
     for _,p in ipairs(DB.BuildCarPath(DB.Gas.parking[self.ParkingID])) do self.Path[#self.Path+1]=b:LocalToWorld(p)+Vector(0,0,self.GroundOffset) end
     self.Index=2 self.Direction=1 self.Speed=0 self.Cruise=math.Rand(80,110)
     self:SetPos(self.Path[1]) self:SetAngles(Angle(0,(self.Path[2]-self.Path[1]):Angle().y+self.NativeYaw,0))
-    if self:Blocked(self:GetPos(),self:GetAngles().y) then self:Remove() return end
+    if self:DBIsPathBlocked(self:GetPos(),self:GetAngles().y) then self:Remove() return end
     self.LastThink=CurTime() self:SetVisitState("Arriving")
     self.Engine=CreateSound(self,"vehicles/v8/v8_idle_loop1.wav")
+    self.DBReady=true
 end
-function ENT:Blocked(step,yaw)
+function ENT:DBIsPathBlocked(step,yaw)
     local lo,hi=DB.CarTraceBounds(self.ModelMin,self.ModelMax,yaw)
     local oldLo,oldHi=DB.CarTraceBounds(self.ModelMin,self.ModelMax,self:GetAngles().y)
     lo.x=math.min(lo.x,oldLo.x)-1 lo.y=math.min(lo.y,oldLo.y)-1
@@ -56,6 +58,8 @@ function ENT:Honk()
     self.HornAt=CurTime()+15 self:EmitSound("buttons/blip1.wav",65,100,0.5)
 end
 function ENT:Think()
+    -- Discard incomplete setup, including old failed cars after a Lua refresh.
+    if not self.DBReady then self:Remove() return end
     local b=self.DBBuilding if not IsValid(b) then self:Remove() return end
     local now=CurTime() local dt=math.Clamp(now-self.LastThink,0,0.1) self.LastThink=now
     if self.Parked then
@@ -93,7 +97,7 @@ function ENT:Think()
             if self.Index==#self.Path or self.Index==1 then speed=math.min(speed,delta:Length()+8) end
             self.Speed=math.Approach(self.Speed,aligned and speed or 0,45*dt)
             local step=self:GetPos()+delta:GetNormalized()*math.min(delta:Length(),self.Speed*dt)
-            if not self:Blocked(step,yaw) then
+            if not self:DBIsPathBlocked(step,yaw) then
                 self:SetPos(step) self:SetAngles(Angle(0,yaw,0)) self.BlockedAt=nil
                 self:SetVisitState(reversing and "Reversing" or (self.Direction==1 and "Arriving" or "Leaving"))
             else

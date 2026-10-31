@@ -287,5 +287,45 @@ assert(b.Parking[1]==nil and b.LaneCar==nil and stopped==1,'removing a car relea
 assert(DynamicBuildings.TakeTrafficLane(b,other),'removing a lane owner releases waiting traffic')
 b.Parking[1]=other car:OnRemove()
 assert(b.Parking[1]==other and b.LaneCar==other,'removal must not clear another car reservation')
+-- Reproduce engine-method precedence; a plain ENT-only table missed this collision.
+local vm={}
+function Vector(x,y,z) return setmetatable({x=x,y=y,z=z},vm) end
+vm.__add=function(a,b) return Vector(a.x+b.x,a.y+b.y,a.z+b.z) end
+vm.__sub=function(a,b) return Vector(a.x-b.x,a.y-b.y,a.z-b.z) end
+vm.__index={Angle=function() return {y=0} end}
+function Angle(p,y,r) return {p=p,y=y,r=r} end
+function Color() return {} end function CurTime() return 10 end
+function math.Rand(a) return a end
+function CreateSound() return {Stop=function() end} end
+local DB=DynamicBuildings
+DB.Gas={parking={{Vector(0,0,2),Vector(100,0,2)}}}
+DB.BuildCarPath=function(p) return p end
+DB.ChooseCarModel=function() return 'test.mdl' end DB.ChooseCarSkin=function() return 0 end
+DB.CarTraceBounds=function(mn,mx) return Vector(mn.x,mn.y,mn.z),Vector(mx.x,mx.y,mx.z) end
+local collision=false
+util.TraceHull=function() return {Hit=collision,StartSolid=false} end
+local shop={LocalToWorld=function(_,p) return p end}
+local function fresh()
+ local e=setmetatable({DBBuilding=shop},{__index=function(_,key)
+  if key=='Blocked' then return function() error('native Blocked expects an Entity, not a Vector') end end
+  return ENT[key]
+ end})
+ for _,name in ipairs({'SetModel','SetSkin','SetColor','SetNW2Vector','SetNW2Float','SetSolid','SetCollisionBounds','SetMoveType','SetUseType','SetVisitState'}) do e[name]=function() end end
+ function e:SkinCount() return 1 end
+ function e:GetModelBounds() return Vector(-90,-40,-10),Vector(90,40,50) end
+ function e:SetPos(p) self.pos=p end function e:GetPos() return self.pos end
+ function e:SetAngles(a) self.ang=a end function e:GetAngles() return self.ang end
+ function e:Remove() self.removed=true self:OnRemove() end
+ return e
+end
+local ready=fresh() ready:Initialize()
+assert(ready.DBReady and ready.LastThink==10 and not ready.removed,'car setup must bypass native Blocked and initialize movement state')
+ready:OnRemove()
+local partial=fresh() shop.LaneCar=partial shop.Parking={[1]=partial} partial.ParkingID=1
+partial:Think()
+assert(partial.removed and shop.LaneCar==nil and shop.Parking[1]==nil,'incomplete cars must clean up without arithmetic on a nil clock')
+collision=true
+local obstructed=fresh() obstructed:Initialize()
+assert(obstructed.removed and not obstructed.DBReady and shop.LaneCar==nil,'a blocked spawn must release its lane without becoming ready')
 `, 'vehicle cleanup tests')();
 console.log('PASS: '+count+' Lua files parse; routes, queues, reversed-door passage, curved traffic/bounds, vehicle cleanup, inventory/checkout and bounded lighting tests.');

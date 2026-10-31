@@ -1,5 +1,11 @@
 # Changes
 
+## 0.4.1 alpha
+
+- Rename the car clearance helper to `DBIsPathBlocked`: `Blocked` collides with a native entity method and prevented car initialization in GMod.
+- Set the car clock before setup and remove incomplete cars before Think uses movement state, preventing the subsequent nil `LastThink` error loop. Removal releases the car's lane and parking reservations.
+- Add a regression using native-method-first lookup, plus incomplete-initialization cleanup coverage.
+
 ## 0.4.0 alpha
 
 - Reverse both doors to open inward. Move the inside/outside waiting points beyond their sweep, request opening before citizens approach, wait until the leaf clears, and serialize opposing passage. Passage claims release on crossing, actor removal or lease expiry.

@@ -1,6 +1,6 @@
 DynamicBuildings = DynamicBuildings or {}
 local DB = DynamicBuildings
-DB.Version = "0.4.0-alpha"
+DB.Version = "0.4.1-alpha"
 if SERVER then
     AddCSLuaFile("dynamic_buildings/sh_gas.lua")
     AddCSLuaFile("dynamic_buildings/cl_tools.lua")
