@@ -1,5 +1,14 @@
 # Changes
 
+## 0.4.0 alpha
+
+- Reverse both doors to open inward. Move the inside/outside waiting points beyond their sweep, request opening before citizens approach, wait until the leaf clears, and serialize opposing passage. Passage claims release on crossing, actor removal or lease expiry.
+- Stock two racks with 30 actual props. Players physically carry products, return unpaid items, check out and consume purchases. NPCs take stock and carry a visible hand prop; empty-handed visitors retry or leave. Basket references track actual items and prune invalid ones; cap loose products at 40 per station and expire temporary stock.
+- Add six ceiling fixtures using verified stock `prison_lamp001c` lit/unlit skins and switchable station-local lighting. Light refreshes are distance-limited/throttled, capped at eight ceiling lights plus two vehicle light pools per viewer; `db_lighting 0` opts out locally.
+- Support two reserved vehicle destinations, curved approach samples, reversing, varied cruise speed, engine audio, warning signals, clearer spawn checks and model-axis-aware rectangular clearance sweeps. Passengers spawn beside their vehicle and return to it before departure.
+- Fix the circular vehicle trace that could reject a road lane despite its rectangular body fitting. Serialize arrivals/departures on the shared drive to prevent head-on deadlocks; reserve population capacity for incoming passengers. Stop engine sounds and release only the removed car's own parking/lane reservations. Alternate walking/car visits so traffic also works with a one-customer limit. Keep traffic off by default pending in-game path/asset checks.
+- Extend regressions for reverse swing, rotated door crossings, early opening/single-file passage, physical-item basket transactions, curved path endpoints, rotated car bounds, parking/audio cleanup and lighting budgets.
+
 ## 0.3.0 alpha
 
 - Replace engine prop doors with explicit 48 x 108 jamb-hinged doors. Native door model geometry is fitted to the hinge coordinate system on the client; matching convex collision is built in both realms. Door leaves swing outward from measured jambs and pause on obstruction. Manual operation has a short automatic-close grace period.

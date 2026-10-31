@@ -10,8 +10,10 @@ function DB.TraceActor(building, actor, a, b, planning)
         end})
 end
 function DB.FindRoute(building, actor, destination, avoidActors)
-    if not DB.Gas.points[destination] then return nil end
-    local goal = DB.GasPoint(building,destination)
+    local goal
+    if destination=="vehicle" and actor.VisitCar and actor.VisitCar.PassengerPoint then goal=actor.VisitCar.PassengerPoint
+    elseif DB.Gas.points[destination] then goal=DB.GasPoint(building,destination) end
+    if not goal then return nil end
     local start = actor:GetPos()
     local function clear(a,b)
         local tr=DB.TraceActor(building,actor,a,b,avoidActors and "dynamic" or true)

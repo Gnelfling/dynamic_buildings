@@ -6,4 +6,5 @@ ENT.Spawnable=true
 ENT.AdminOnly=false
 function ENT:SetupDataTables()
     self:NetworkVar("Bool",0,"Occupied")
+    self:NetworkVar("Bool",1,"LightsOn")
 end

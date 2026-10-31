@@ -28,12 +28,13 @@ function ENT:Initialize()
 end
 function ENT:Go(name,nextState)
     local b=self.DBBuilding
-    local owner=b.Reservations[name]
+    local key=name=="vehicle" and IsValid(self.VisitCar) and self.VisitCar or name
+    local owner=b.Reservations[key]
     if IsValid(owner) and owner~=self then self.WaitUntil=CurTime()+2 return false end
     local route=DB.FindRoute(b,self,name)
     -- Keep the occupied spot reserved if the next journey cannot start.
     if not route then self.WaitUntil=CurTime()+4 return false end
-    b:Release(self) b:Reserve(name,self)
+    b:Release(self) b:Reserve(key,self)
     self.Target=name self.Route=route self.RouteIndex=1 self.AfterMove=nextState
     self.BlockedSince=nil
     self:SetActivity("Walking") return true
@@ -51,14 +52,15 @@ function ENT:Think()
             if distance<2 then self.RouteIndex=self.RouteIndex+1
             else
                 local step=self:GetPos()+delta:GetNormalized()*math.min(distance,self.Speed*dt)
+                local waitingDoor=DB.WaitForDoor(b,self,target)
                 local hit=DB.TraceActor(b,self,self:GetPos(),step,false)
-                if not hit.Hit and not hit.StartSolid then
+                if not waitingDoor and not hit.Hit and not hit.StartSolid then
                     self:SetPos(step) self.BlockedSince=nil
                     self:SetActivity("Walking")
                     self:SetAngles(Angle(0,math.ApproachAngle(self:GetAngles().y,delta:Angle().y,220*dt),0))
                     self:Animate({"walk_all","walk_all_Moderate"})
                 else
-                    self:Animate({"idle_subtle","Idle01"}) self:SetActivity("Waiting for room")
+                    self:Animate({"idle_subtle","Idle01"}) self:SetActivity(waitingDoor and "Waiting for door" or "Waiting for room")
                     self.BlockedSince=self.BlockedSince or now
                     if now-self.BlockedSince>4 and now>(self.ReplanAt or 0) then
                         self.ReplanAt=now+3 local route=DB.FindRoute(b,self,self.Target,true)
@@ -75,7 +77,17 @@ function ENT:Think()
             if self.State=="enter" then self:Go("entry","choose")
             elseif self.State=="choose" then self:Go(DB.Gas.browsing[math.random(1,3)],"browsing")
             elseif self.State=="browsing" then
-                DB.JoinQueue(b,self) self.State="queuing" self.WaitUntil=now+0.1
+                if not IsValid(self.CarriedProduct) then
+                    local item=DB.PickStock(b,self)
+                    if IsValid(item) then item:Take(self) end
+                end
+                if IsValid(self.CarriedProduct) then
+                    DB.JoinQueue(b,self) self.State="queuing" self.WaitUntil=now+0.1
+                else
+                    self.ShoppingAttempts=(self.ShoppingAttempts or 0)+1
+                    if self.ShoppingAttempts<3 then self:Go(DB.Gas.browsing[math.random(1,2)],"browsing")
+                    else self:Go("outside","leaving") end
+                end
             elseif self.State=="queuing" then
                 local rank=DB.QueuePosition(b,self)
                 if not rank then DB.JoinQueue(b,self) else
@@ -86,9 +98,13 @@ function ENT:Think()
             elseif self.State=="paying" then
                 if not self.Paid then
                     self.Paid=true self:EmitSound("buttons/button14.wav",55,100,0.4)
+                    if IsValid(self.CarriedProduct) then self.CarriedProduct:SetPurchased(true) end
                 end
                 if self:Go("outside","leaving") then DB.LeaveQueue(b,self) end
-            elseif self.State=="leaving" then self:Remove() return
+            elseif self.State=="leaving" then
+                if IsValid(self.VisitCar) and self.VisitCar.PassengerPoint then self:Go("vehicle","boarding")
+                else self:Remove() return end
+            elseif self.State=="boarding" then self:Remove() return
             elseif self.State=="working" then
                 self.WaitUntil=now+math.Rand(3,7)
                 self:SetPoseParameter("head_yaw",math.Rand(-25,25))

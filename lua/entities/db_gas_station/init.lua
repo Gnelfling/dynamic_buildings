@@ -32,8 +32,9 @@ function ENT:Own(e)
     return e
 end
 function ENT:Initialize()
-    self.Children={} self.Reservations={} self.CheckoutQueue={} self.Carts={}
+    self.Children={} self.Reservations={} self.CheckoutQueue={} self.Carts={} self.Parking={}
     self.NextVisit=CurTime()+4 self.NextStock=CurTime()+1
+    self:SetLightsOn(true)
     self:SetModel(DB.Gas.model) self:PhysicsInit(SOLID_VPHYSICS)
     self:SetMoveType(MOVETYPE_NONE) self:SetSolid(SOLID_VPHYSICS)
     local ph=self:GetPhysicsObject() if IsValid(ph) then ph:EnableMotion(false) end
@@ -49,6 +50,14 @@ function ENT:Initialize()
         end
     end
     self.Clerk=self:SpawnPerson("clerk")
+    self.Lights={}
+    for _,p in ipairs(DB.Gas.ceilingLights) do
+        local light=ents.Create("db_ceiling_light")
+        if IsValid(light) then
+            self:Own(light) light:SetPos(self:LocalToWorld(p)) light:SetAngles(self:GetAngles()) light:Spawn()
+            self.Lights[#self.Lights+1]=light
+        end
+    end
 end
 function ENT:CustomerCount()
     local n=0
@@ -57,10 +66,17 @@ function ENT:CustomerCount()
     end
     return n
 end
-function ENT:SpawnPerson(role,car)
+function ENT:PendingCarCount(except)
+    local n=0
+    for car in pairs(self.Children) do
+        if car~=except and IsValid(car) and car:GetClass()=="db_visit_car" and not car.HadCustomer and not car.CustomerDone then n=n+1 end
+    end
+    return n
+end
+function ENT:SpawnPerson(role,car,spawnPos)
     if self.Removing then return end
-    if role~="clerk" and self:CustomerCount()>=GetConVar("db_customers"):GetInt() then return end
-    local pos=DB.GasPoint(self,role=="clerk" and "clerk" or "outside")
+    if role~="clerk" and self:CustomerCount()+self:PendingCarCount(car)>=GetConVar("db_customers"):GetInt() then return end
+    local pos=spawnPos or DB.GasPoint(self,role=="clerk" and "clerk" or "outside")
     local space=util.TraceHull({start=pos,endpos=pos,mins=Vector(-16,-16,1),maxs=Vector(16,16,70),mask=MASK_PLAYERSOLID})
     if space.Hit or space.StartSolid then return end
     local e=ents.Create("db_actor") if not IsValid(e) then return end
@@ -87,20 +103,26 @@ function ENT:Think()
     if now>self.NextStock then
         self.NextStock=now+20 self:Restock()
         if not IsValid(self.Clerk) then self.Clerk=self:SpawnPerson("clerk") end
-        for ply in pairs(self.Carts) do if not IsValid(ply) then self.Carts[ply]=nil end end
+        for ply,cart in pairs(self.Carts) do
+            if not IsValid(ply) then
+                if type(cart)=="table" then for item in pairs(cart) do if IsValid(item) then item:Remove() end end end
+                self.Carts[ply]=nil
+            else DB.CartCount(self,ply) end
+        end
     end
     if now>self.NextVisit then
         self.NextVisit=now+math.Rand(18,32)
-        local count=0
         for e in pairs(self.Children) do
-            if not IsValid(e) then self.Children[e]=nil
-            elseif e.DBActor and e.Role~="clerk" then count=count+1 end
+            if not IsValid(e) then self.Children[e]=nil end
         end
-        if count<GetConVar("db_customers"):GetInt() then self:SpawnPerson("customer") end
-        if GetConVar("db_traffic"):GetBool() and count<GetConVar("db_customers"):GetInt() and not IsValid(self.VisitCar) then
+        local free
+        for i=1,#DB.Gas.parking do if not IsValid(self.Parking[i]) then free=i break end end
+        self.PreferCar=not self.PreferCar
+        if self.PreferCar and GetConVar("db_traffic"):GetBool() and self:CustomerCount()+self:PendingCarCount()<GetConVar("db_customers"):GetInt() and free and not IsValid(self.LaneCar) then
             local car=ents.Create("db_visit_car")
-            if IsValid(car) then self:Own(car) self.VisitCar=car car:Spawn() end
-        end
+            if IsValid(car) then self:Own(car) car.ParkingID=free self.Parking[free]=car car:Spawn() end
+            if not IsValid(car) then self:SpawnPerson("customer") end
+        else self:SpawnPerson("customer") end
     end
     self:NextThink(now+0.25) return true
 end
@@ -110,25 +132,31 @@ function ENT:OnRemove()
 end
 function ENT:Restock()
     self.Stock=self.Stock or {}
-    for tier=1,3 do for slot=1,5 do
-        local key=tier..":"..slot
+    for rack=1,2 do for tier=1,3 do for slot=1,5 do
+        local key=rack..":"..tier..":"..slot
         if not IsValid(self.Stock[key]) then
             local e=ents.Create("db_product")
             if IsValid(e) then
                 self:Own(e)
                 local height=({14,36,56.637})[tier]+14*4.079/34
-                e.SupportPos=self:LocalToWorld(Vector(-1640+(slot-1)*60,-524,height+0.5))
+                local pos=rack==1 and Vector(-1640+(slot-1)*60,-524,height+0.5) or Vector(-1500+(slot-1)*24,-354,height+0.5)
+                e.StockKey=key
+                if tier==1 and slot%2==0 then e.ItemModel="models/props_junk/garbage_milkcarton002a.mdl" e.Label="Milk carton" end
+                e.SupportPos=self:LocalToWorld(pos)
                 e:Spawn() self.Stock[key]=e
             end
         end
-    end end
+    end end end
 end
 function ENT:CheckoutPlayer(ply)
-    local cart=self.Carts[ply]
-    if not cart or cart<1 then ply:ChatPrint("Clerk: Pick a drink from the shelves, then come back to me.") return end
+    local count=DB.CartCount(self,ply)
+    if count<1 then ply:ChatPrint("Clerk: Pick something from the shelves, then come back to me.") return end
+    for item in pairs(self.Carts[ply]) do
+        if IsValid(item) then item:SetPurchased(true) item.ExpiresAt=CurTime()+180 end
+    end
     self.Carts[ply]=nil
     ply:EmitSound("buttons/button14.wav",60)
-    ply:ChatPrint("Clerk: "..cart.." drink(s). You're all set, thank you!")
+    ply:ChatPrint("Clerk: "..count.." item(s). All paid! E on a purchased item to enjoy it.")
 end
 hook.Add("PhysgunPickup","DB.FixedScenes",function(_,e)
     if e:GetClass()=="db_gas_station" or IsValid(e.DBBuilding) then return false end
