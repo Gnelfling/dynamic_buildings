@@ -32,7 +32,8 @@ function ENT:Own(e)
     return e
 end
 function ENT:Initialize()
-    self.Children={} self.Reservations={} self.NextVisit=CurTime()+4
+    self.Children={} self.Reservations={} self.CheckoutQueue={} self.Carts={}
+    self.NextVisit=CurTime()+4 self.NextStock=CurTime()+1
     self:SetModel(DB.Gas.model) self:PhysicsInit(SOLID_VPHYSICS)
     self:SetMoveType(MOVETYPE_NONE) self:SetSolid(SOLID_VPHYSICS)
     local ph=self:GetPhysicsObject() if IsValid(ph) then ph:EnableMotion(false) end
@@ -44,13 +45,26 @@ function ENT:Initialize()
             door:SetModel("models/props_c17/door01_left.mdl")
             door:SetPos(self:LocalToWorld(d.pos)) door:SetAngles(Angle(0,self:GetAngles().y+d.yaw,0))
             door:SetKeyValue("distance","90") door:SetKeyValue("speed","120")
+            -- Force the reverse swing; automatic Open without an activator
+            -- previously always selected Source's forward direction.
+            door:SetKeyValue("opendir",tostring(d.openDirection or 2))
+            door:SetKeyValue("dmg","0") door:SetKeyValue("forceclosed","0")
             door:SetKeyValue("returndelay","-1") door.DBManagedDoor=true
-            door:Spawn() self:Own(door) self.Doors[#self.Doors+1]=door
+            door:Spawn() door:Activate() self:Own(door) self.Doors[#self.Doors+1]=door
         end
     end
-    self:SpawnPerson("clerk")
+    self.Clerk=self:SpawnPerson("clerk")
+end
+function ENT:CustomerCount()
+    local n=0
+    for e in pairs(self.Children) do
+        if IsValid(e) and e.DBActor and e.Role~="clerk" then n=n+1 end
+    end
+    return n
 end
 function ENT:SpawnPerson(role,car)
+    if self.Removing then return end
+    if role~="clerk" and self:CustomerCount()>=GetConVar("db_customers"):GetInt() then return end
     local pos=DB.GasPoint(self,role=="clerk" and "clerk" or "outside")
     local space=util.TraceHull({start=pos,endpos=pos,mins=Vector(-16,-16,1),maxs=Vector(16,16,70),mask=MASK_PLAYERSOLID})
     if space.Hit or space.StartSolid then return end
@@ -72,13 +86,13 @@ function ENT:Think()
     local now=CurTime()
     for _,door in ipairs(self.Doors) do
         if IsValid(door) then
-            local near=false
-            for _,e in ipairs(ents.FindInSphere(door:GetPos(),100)) do
-                if e.DBActor or e:IsPlayer() then near=true break end
-            end
-            if near then door:Fire("Open") door.DBCloseAt=now+3
-            elseif door.DBCloseAt and now>door.DBCloseAt then door:Fire("Close") door.DBCloseAt=nil end
+            DB.DoorDemand(self,door,now)
         end
+    end
+    if now>self.NextStock then
+        self.NextStock=now+20 self:Restock()
+        if not IsValid(self.Clerk) then self.Clerk=self:SpawnPerson("clerk") end
+        for ply in pairs(self.Carts) do if not IsValid(ply) then self.Carts[ply]=nil end end
     end
     if now>self.NextVisit then
         self.NextVisit=now+math.Rand(18,32)
@@ -88,7 +102,7 @@ function ENT:Think()
             elseif e.DBActor and e.Role~="clerk" then count=count+1 end
         end
         if count<GetConVar("db_customers"):GetInt() then self:SpawnPerson("customer") end
-        if GetConVar("db_traffic"):GetBool() and not IsValid(self.VisitCar) then
+        if GetConVar("db_traffic"):GetBool() and count<GetConVar("db_customers"):GetInt() and not IsValid(self.VisitCar) then
             local car=ents.Create("db_visit_car")
             if IsValid(car) then self:Own(car) self.VisitCar=car car:Spawn() end
         end
@@ -96,7 +110,30 @@ function ENT:Think()
     self:NextThink(now+0.25) return true
 end
 function ENT:OnRemove()
+    self.Removing=true
     for e in pairs(self.Children or {}) do if IsValid(e) then e:Remove() end end
+end
+function ENT:Restock()
+    self.Stock=self.Stock or {}
+    for tier=1,3 do for slot=1,5 do
+        local key=tier..":"..slot
+        if not IsValid(self.Stock[key]) then
+            local e=ents.Create("db_product")
+            if IsValid(e) then
+                self:Own(e)
+                local height=({14,36,56.637})[tier]+14*4.079/34
+                e.SupportPos=self:LocalToWorld(Vector(-1640+(slot-1)*60,-524,height+0.5))
+                e:Spawn() self.Stock[key]=e
+            end
+        end
+    end end
+end
+function ENT:CheckoutPlayer(ply)
+    local cart=self.Carts[ply]
+    if not cart or cart<1 then ply:ChatPrint("Clerk: Pick a drink from the shelves, then come back to me.") return end
+    self.Carts[ply]=nil
+    ply:EmitSound("buttons/button14.wav",60)
+    ply:ChatPrint("Clerk: "..cart.." drink(s). You're all set, thank you!")
 end
 hook.Add("PhysgunPickup","DB.FixedScenes",function(_,e)
     if e:GetClass()=="db_gas_station" or IsValid(e.DBBuilding) then return false end

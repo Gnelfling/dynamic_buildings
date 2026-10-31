@@ -4,7 +4,9 @@ function ENT:Initialize()
     local b=self.DBBuilding if not IsValid(b) then self:Remove() return end
     self:SetModel("models/props_vehicles/car004a_physics.mdl")
     self:SetSolid(SOLID_OBB) self:SetMoveType(MOVETYPE_NONE)
-    self.Index=2 self.Direction=1 self:SetPos(b:LocalToWorld(DB.Gas.carRoute[1]))
+    self.GroundOffset=-self:OBBMins().z
+    self.Index=2 self.Direction=1 self:SetPos(b:LocalToWorld(DB.Gas.carRoute[1])+Vector(0,0,self.GroundOffset))
+    self:SetAngles(Angle(0,(b:LocalToWorld(DB.Gas.carRoute[2])-b:LocalToWorld(DB.Gas.carRoute[1])):Angle().y,0))
     self.LastThink=CurTime()
 end
 function ENT:Think()
@@ -15,7 +17,7 @@ function ENT:Think()
     else
         local p=DB.Gas.carRoute[self.Index]
         if not p then self:Remove() return end
-        local target=b:LocalToWorld(p) local delta=target-self:GetPos()
+        local target=b:LocalToWorld(p)+Vector(0,0,self.GroundOffset) local delta=target-self:GetPos()
         if delta:Length()<3 then
             if self.Direction==1 and self.Index==#DB.Gas.carRoute then
                 self.Parked=true self.Customer=b:SpawnPerson("customer",self)
@@ -24,7 +26,7 @@ function ENT:Think()
         else
             local step=self:GetPos()+delta:GetNormalized()*math.min(delta:Length(),70*dt)
             -- Conservative enclosing hull; wait instead of pushing a player.
-            local tr=util.TraceHull({start=self:GetPos(),endpos=step,mins=Vector(-100,-100,8),maxs=Vector(100,100,70),filter=self,mask=MASK_SOLID})
+            local tr=util.TraceHull({start=self:GetPos(),endpos=step,mins=Vector(-100,-100,8-self.GroundOffset),maxs=Vector(100,100,70-self.GroundOffset),filter=self,mask=MASK_SOLID})
             if not tr.Hit and not tr.StartSolid then
                 self:SetPos(step) self:SetAngles(Angle(0,delta:Angle().y,0))
             end

@@ -4,15 +4,17 @@ function DB.TraceActor(building, actor, a, b, planning)
     return util.TraceHull({start=a,endpos=b,mins=mins,maxs=maxs,mask=MASK_PLAYERSOLID,
         filter=function(e)
             if e==actor then return false end
-            if planning and (e.DBActor or e.DBManagedDoor) then return false end
+            if planning and e.DBManagedDoor then return false end
+            if planning==true and e.DBActor then return false end
             return true
         end})
 end
-function DB.FindRoute(building, actor, destination)
+function DB.FindRoute(building, actor, destination, avoidActors)
+    if not DB.Gas.points[destination] then return nil end
     local goal = DB.GasPoint(building,destination)
     local start = actor:GetPos()
     local function clear(a,b)
-        local tr=DB.TraceActor(building,actor,a,b,true)
+        local tr=DB.TraceActor(building,actor,a,b,avoidActors and "dynamic" or true)
         return not tr.Hit and not tr.StartSolid
     end
     if clear(start,goal) then return {goal} end
